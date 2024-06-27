@@ -2061,6 +2061,7 @@ include "RISCVInstrInfoZcmop.td"
 include "RISCVInstrInfoZimop.td"
 include "RISCVInstrInfoZicbo.td"
 include "RISCVInstrInfoZicond.td"
+include "RISCVInstrInfoZicldst.td"
 include "RISCVInstrInfoZicfiss.td"
 
 //===----------------------------------------------------------------------===//
