@@ -205,6 +205,80 @@ if.end:
   ret i32 %phi
 }
 
+define i32 @expensive_to_hoist(i32 %a, ptr %b, ptr %p, ptr %q, i32 %v0, i32 %v1, i32 %v2, i1 %cc) {
+; CHECK-LABEL: @expensive_to_hoist(
+; CHECK-NEXT:  entry:
+; CHECK-NEXT:    [[COND:%.*]] = icmp eq i32 [[A:%.*]], 0
+; CHECK-NEXT:    [[TMP0:%.*]] = bitcast i1 [[COND]] to <1 x i1>
+; CHECK-NEXT:    [[TMP1:%.*]] = call <1 x i32> @llvm.masked.load.v1i32.p0(ptr [[B:%.*]], i32 4, <1 x i1> [[TMP0]], <1 x i32> poison), !dbg [[DBG8]], !range [[RNG13:![0-9]+]]
+; CHECK-NEXT:    [[TMP2:%.*]] = bitcast <1 x i32> [[TMP1]] to i32
+; CHECK-NEXT:    [[TMP3:%.*]] = bitcast i32 [[TMP2]] to <1 x i32>
+; CHECK-NEXT:    call void @llvm.masked.store.v1i32.p0(<1 x i32> [[TMP3]], ptr [[P:%.*]], i32 4, <1 x i1> [[TMP0]])
+; CHECK-NEXT:    [[TMP4:%.*]] = xor i1 [[COND]], true
+; CHECK-NEXT:    [[TMP5:%.*]] = bitcast i1 [[TMP4]] to <1 x i1>
+; CHECK-NEXT:    call void @llvm.masked.store.v1i64.p0(<1 x i64> <i64 1>, ptr [[P]], i32 8, <1 x i1> [[TMP5]]), !dbg [[DBG12]]
+; CHECK-NEXT:    call void @llvm.masked.store.v1i16.p0(<1 x i16> <i16 2>, ptr [[Q:%.*]], i32 8, <1 x i1> [[TMP5]]), !dbg [[DBG12]]
+; CHECK-NEXT:    br i1 [[COND]], label [[COMMON_RET:%.*]], label [[IF_FALSE:%.*]]
+; CHECK:       common.ret:
+; CHECK-NEXT:    [[COMMON_RET_OP:%.*]] = phi i32 [ [[VVVV:%.*]], [[IF_FALSE]] ], [ 0, [[ENTRY:%.*]] ]
+; CHECK-NEXT:    ret i32 [[COMMON_RET_OP]]
+; CHECK:       if.false:
+; CHECK-NEXT:    [[V:%.*]] = udiv i32 [[A]], 12345
+; CHECK-NEXT:    [[VV:%.*]] = mul i32 [[V]], [[V0:%.*]]
+; CHECK-NEXT:    [[VVV:%.*]] = mul i32 [[VV]], [[V1:%.*]]
+; CHECK-NEXT:    [[VVVV]] = select i1 [[CC:%.*]], i32 [[V2:%.*]], i32 [[VVV]]
+; CHECK-NEXT:    br label [[COMMON_RET]]
+;
+entry:
+  %cond = icmp eq i32 %a, 0
+  br i1 %cond, label %if.true, label %if.false
+
+if.false:
+  store i64 1, ptr %p, align 8, !dbg !8
+  store i16 2, ptr %q, align 8, !dbg !8
+
+  %v = udiv i32 %a, 12345
+  %vv = mul i32 %v, %v0
+  %vvv = mul i32 %vv, %v1
+  %vvvv = select i1 %cc, i32 %v2, i32 %vvv
+  ret i32 %vvvv
+
+if.true:
+  %0 = load i32, ptr %b, align 4, !dbg !9, !range ! { i32 20, i32 30}
+  store i32 %0, ptr %p, align 4
+  br label %if.end
+
+if.end:
+  ret i32 0
+}
+
+define i32 @load_from_gep(ptr %p)  {
+; CHECK-LABEL: @load_from_gep(
+; CHECK-NEXT:  entry:
+; CHECK-NEXT:    [[COND:%.*]] = icmp eq ptr [[P:%.*]], null
+; CHECK-NEXT:    br i1 [[COND]], label [[IF_TRUE:%.*]], label [[IF_FALSE:%.*]]
+; CHECK:       if.false:
+; CHECK-NEXT:    [[ARRAYIDX:%.*]] = getelementptr inbounds i8, ptr [[P]], i64 16
+; CHECK-NEXT:    [[TMP0:%.*]] = load i32, ptr [[ARRAYIDX]], align 4
+; CHECK-NEXT:    br label [[IF_TRUE]]
+; CHECK:       if.true:
+; CHECK-NEXT:    [[RES:%.*]] = phi i32 [ [[TMP0]], [[IF_FALSE]] ], [ 0, [[ENTRY:%.*]] ]
+; CHECK-NEXT:    ret i32 [[RES]]
+;
+entry:
+  %cond = icmp eq ptr %p, null
+  br i1 %cond, label %if.true, label %if.false
+
+if.false:
+  %arrayidx = getelementptr inbounds i8, ptr %p, i64 16
+  %0 = load i32, ptr %arrayidx
+  br label %if.true
+
+if.true:
+  %res = phi i32 [ %0, %if.false ], [ 0, %entry ]
+  ret i32 %res
+}
+
 ; i8 is not supported by conditional faulting
 define void @not_supported_type(i8 %a, ptr %b, ptr %p, ptr %q) {
 ; CHECK-LABEL: @not_supported_type(
