@@ -105,6 +105,31 @@ if.then:
   br label %if.end
 }
 
+define i32 @succ1to0_phi(ptr %p)  {
+; CHECK-LABEL: @succ1to0_phi(
+; CHECK-NEXT:  entry:
+; CHECK-NEXT:    [[COND:%.*]] = icmp eq ptr [[P:%.*]], null
+; CHECK-NEXT:    br i1 [[COND]], label [[IF_TRUE:%.*]], label [[IF_FALSE:%.*]]
+; CHECK:       if.false:
+; CHECK-NEXT:    [[TMP0:%.*]] = load i32, ptr [[P]], align 4
+; CHECK-NEXT:    br label [[IF_TRUE]]
+; CHECK:       if.true:
+; CHECK-NEXT:    [[RES:%.*]] = phi i32 [ [[TMP0]], [[IF_FALSE]] ], [ 0, [[ENTRY:%.*]] ]
+; CHECK-NEXT:    ret i32 [[RES]]
+;
+entry:
+  %cond = icmp eq ptr %p, null
+  br i1 %cond, label %if.true, label %if.false
+
+if.false:
+  %0 = load i32, ptr %p
+  br label %if.true
+
+if.true:
+  %res = phi i32 [ %0, %if.false ], [ 0, %entry ]
+  ret i32 %res
+}
+
 ;; successor 0 branches to successor 1.
 define void @succ0to1(i32 %a, ptr %b, ptr %p, ptr %q) {
 ; CHECK-LABEL: @succ0to1(
