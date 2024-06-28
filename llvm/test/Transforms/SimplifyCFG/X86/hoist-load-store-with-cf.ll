@@ -235,14 +235,14 @@ define i32 @expensive_to_hoist(i32 %a, ptr %b, ptr %p, ptr %q, i32 %v0, i32 %v1,
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    [[COND:%.*]] = icmp eq i32 [[A:%.*]], 0
 ; CHECK-NEXT:    [[TMP0:%.*]] = bitcast i1 [[COND]] to <1 x i1>
-; CHECK-NEXT:    [[TMP1:%.*]] = call <1 x i32> @llvm.masked.load.v1i32.p0(ptr [[B:%.*]], i32 4, <1 x i1> [[TMP0]], <1 x i32> poison), !dbg [[DBG8]], !range [[RNG13:![0-9]+]]
+; CHECK-NEXT:    [[TMP1:%.*]] = call <1 x i32> @llvm.masked.load.v1i32.p0(ptr [[B:%.*]], i32 4, <1 x i1> [[TMP0]], <1 x i32> poison)
 ; CHECK-NEXT:    [[TMP2:%.*]] = bitcast <1 x i32> [[TMP1]] to i32
 ; CHECK-NEXT:    [[TMP3:%.*]] = bitcast i32 [[TMP2]] to <1 x i32>
 ; CHECK-NEXT:    call void @llvm.masked.store.v1i32.p0(<1 x i32> [[TMP3]], ptr [[P:%.*]], i32 4, <1 x i1> [[TMP0]])
 ; CHECK-NEXT:    [[TMP4:%.*]] = xor i1 [[COND]], true
 ; CHECK-NEXT:    [[TMP5:%.*]] = bitcast i1 [[TMP4]] to <1 x i1>
-; CHECK-NEXT:    call void @llvm.masked.store.v1i64.p0(<1 x i64> <i64 1>, ptr [[P]], i32 8, <1 x i1> [[TMP5]]), !dbg [[DBG12]]
-; CHECK-NEXT:    call void @llvm.masked.store.v1i16.p0(<1 x i16> <i16 2>, ptr [[Q:%.*]], i32 8, <1 x i1> [[TMP5]]), !dbg [[DBG12]]
+; CHECK-NEXT:    call void @llvm.masked.store.v1i64.p0(<1 x i64> <i64 1>, ptr [[P]], i32 8, <1 x i1> [[TMP5]])
+; CHECK-NEXT:    call void @llvm.masked.store.v1i16.p0(<1 x i16> <i16 2>, ptr [[Q:%.*]], i32 2, <1 x i1> [[TMP5]])
 ; CHECK-NEXT:    br i1 [[COND]], label [[COMMON_RET:%.*]], label [[IF_FALSE:%.*]]
 ; CHECK:       common.ret:
 ; CHECK-NEXT:    [[COMMON_RET_OP:%.*]] = phi i32 [ [[VVVV:%.*]], [[IF_FALSE]] ], [ 0, [[ENTRY:%.*]] ]
@@ -259,8 +259,8 @@ entry:
   br i1 %cond, label %if.true, label %if.false
 
 if.false:
-  store i64 1, ptr %p, align 8, !dbg !8
-  store i16 2, ptr %q, align 8, !dbg !8
+  store i64 1, ptr %p
+  store i16 2, ptr %q
 
   %v = udiv i32 %a, 12345
   %vv = mul i32 %v, %v0
@@ -269,8 +269,8 @@ if.false:
   ret i32 %vvvv
 
 if.true:
-  %0 = load i32, ptr %b, align 4, !dbg !9, !range ! { i32 20, i32 30}
-  store i32 %0, ptr %p, align 4
+  %0 = load i32, ptr %b
+  store i32 %0, ptr %p
   br label %if.end
 
 if.end:
