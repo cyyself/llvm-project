@@ -4049,35 +4049,27 @@ Instruction *InstCombinerImpl::visitSelectInst(SelectInst &SI) {
   if (CondVal->getType() == SI.getType() && isKnownInversion(FalseVal, TrueVal))
     return BinaryOperator::CreateXor(CondVal, FalseVal);
 
-  // For vectors, this transform is only safe if the simplification does not
-  // look through any lane-crossing operations. For now, limit to scalars only.
-  if (SelType->isIntegerTy() &&
-      (!isa<Constant>(TrueVal) || !isa<Constant>(FalseVal))) {
-    // Try to simplify select arms based on KnownBits implied by the condition.
-    CondContext CC(CondVal);
-    findValuesAffectedByCondition(CondVal, /*IsAssume=*/false, [&](Value *V) {
-      CC.AffectedValues.insert(V);
-    });
-    SimplifyQuery Q = SQ.getWithInstruction(&SI).getWithCondContext(CC);
-    if (!CC.AffectedValues.empty()) {
-      if (!isa<Constant>(TrueVal) &&
-          hasAffectedValue(TrueVal, CC.AffectedValues, /*Depth=*/0)) {
-        KnownBits Known = llvm::computeKnownBits(TrueVal, /*Depth=*/0, Q);
-        if (Known.isConstant())
-          return replaceOperand(SI, 1,
-                                ConstantInt::get(SelType, Known.getConstant()));
-      }
-
-      CC.Invert = true;
-      if (!isa<Constant>(FalseVal) &&
-          hasAffectedValue(FalseVal, CC.AffectedValues, /*Depth=*/0)) {
-        KnownBits Known = llvm::computeKnownBits(FalseVal, /*Depth=*/0, Q);
-        if (Known.isConstant())
-          return replaceOperand(SI, 2,
-                                ConstantInt::get(SelType, Known.getConstant()));
-      }
+  // select mask, masked load (ptr, align, mask, V), FV -> masked load (ptr,
+  // align, mask, FV)
+  {
+    Value *Ptr, *MaskVec, *PassThru;
+    uint64_t Alignment;
+    if (CondVal->getType()->isIntegerTy(1) &&
+        match(TrueVal,
+              m_OneUse(m_ExtractElt(
+                  m_OneUse(m_MaskedLoad(m_Value(Ptr), m_ConstantInt(Alignment),
+                                        m_Value(MaskVec), m_Value(PassThru))),
+                  m_Zero()))) &&
+        match(MaskVec,
+              m_InsertElt(m_Poison(), m_Specific(CondVal), m_Zero())) &&
+        MaskVec->getType() == FixedVectorType::get(Builder.getInt1Ty(), 1)
+        // && isGuaranteedNotToBeUndef(Mask, &AC, &I, &DT)
+    ) {
+      auto *NewPassThru = Builder.CreateBitCast(FalseVal, PassThru->getType());
+      auto *NewMaskedLoad = Builder.CreateMaskedLoad(
+          PassThru->getType(), Ptr, Align(Alignment), MaskVec, NewPassThru);
+      return ExtractElementInst::Create(NewMaskedLoad, Builder.getInt32(0));
     }
   }
-
   return nullptr;
 }
