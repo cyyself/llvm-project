@@ -109,13 +109,13 @@ define i32 @succ1to0_phi(ptr %p)  {
 ; CHECK-LABEL: @succ1to0_phi(
 ; CHECK-NEXT:  entry:
 ; CHECK-NEXT:    [[COND:%.*]] = icmp eq ptr [[P:%.*]], null
-; CHECK-NEXT:    br i1 [[COND]], label [[IF_TRUE:%.*]], label [[IF_FALSE:%.*]]
-; CHECK:       if.false:
-; CHECK-NEXT:    [[TMP0:%.*]] = load i32, ptr [[P]], align 4
-; CHECK-NEXT:    br label [[IF_TRUE]]
-; CHECK:       if.true:
-; CHECK-NEXT:    [[RES:%.*]] = phi i32 [ [[TMP0]], [[IF_FALSE]] ], [ 0, [[ENTRY:%.*]] ]
-; CHECK-NEXT:    ret i32 [[RES]]
+; CHECK-NEXT:    [[TMP0:%.*]] = bitcast i1 [[COND]] to <1 x i1>
+; CHECK-NEXT:    [[TMP1:%.*]] = xor i1 [[COND]], true
+; CHECK-NEXT:    [[TMP2:%.*]] = bitcast i1 [[TMP1]] to <1 x i1>
+; CHECK-NEXT:    [[TMP3:%.*]] = call <1 x i32> @llvm.masked.load.v1i32.p0(ptr [[P]], i32 4, <1 x i1> [[TMP2]], <1 x i32> poison)
+; CHECK-NEXT:    [[TMP4:%.*]] = bitcast <1 x i32> [[TMP3]] to i32
+; CHECK-NEXT:    [[SPEC_SELECT:%.*]] = select i1 [[COND]], i32 0, i32 [[TMP4]]
+; CHECK-NEXT:    ret i32 [[SPEC_SELECT]]
 ;
 entry:
   %cond = icmp eq ptr %p, null
@@ -140,9 +140,7 @@ define void @succ0to1(i32 %a, ptr %b, ptr %p, ptr %q) {
 ; CHECK-NEXT:    [[TMP2:%.*]] = bitcast <1 x i32> [[TMP1]] to i32
 ; CHECK-NEXT:    [[TMP3:%.*]] = bitcast i32 [[TMP2]] to <1 x i32>
 ; CHECK-NEXT:    call void @llvm.masked.store.v1i32.p0(<1 x i32> [[TMP3]], ptr [[P:%.*]], i32 4, <1 x i1> [[TMP0]])
-; CHECK-NEXT:    [[TMP4:%.*]] = xor i1 [[COND]], true
-; CHECK-NEXT:    [[TMP5:%.*]] = bitcast i1 [[TMP4]] to <1 x i1>
-; CHECK-NEXT:    call void @llvm.masked.store.v1i32.p0(<1 x i32> <i32 1>, ptr [[Q:%.*]], i32 4, <1 x i1> [[TMP5]])
+; CHECK-NEXT:    store i32 1, ptr [[Q:%.*]], align 4
 ; CHECK-NEXT:    ret void
 ;
 entry:
@@ -302,6 +300,30 @@ if.false:
 if.true:
   %res = phi i32 [ %0, %if.false ], [ 0, %entry ]
   ret i32 %res
+}
+
+define void @not_single_predecessor(i1 %cond1, i1 %cond2, ptr %p) {
+; CHECK-LABEL: @not_single_predecessor(
+; CHECK-NEXT:  entry:
+; CHECK-NEXT:    [[COND2_NOT:%.*]] = xor i1 [[COND2:%.*]], true
+; CHECK-NEXT:    [[BRMERGE:%.*]] = select i1 [[COND1:%.*]], i1 true, i1 [[COND2_NOT]]
+; CHECK-NEXT:    [[TMP0:%.*]] = load i64, ptr [[P:%.*]], align 8
+; CHECK-NEXT:    [[ADD:%.*]] = or i64 [[TMP0]], 0
+; CHECK-NEXT:    ret void
+;
+entry:
+  br i1 %cond1, label %if.true, label %if.false
+
+if.false:
+  br i1 %cond2, label %if.true2, label %if.true
+
+if.true2:
+  br label %if.true
+
+if.true:
+  %0 = load i64, ptr %p, align 8
+  %add = or i64 %0, 0
+  ret void
 }
 
 ; i8 is not supported by conditional faulting

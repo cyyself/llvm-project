@@ -281,7 +281,9 @@ class SimplifyCFGOpt {
   bool hoistSuccIdenticalTerminatorToSwitchOrIf(
       Instruction *TI, Instruction *I1,
       SmallVectorImpl<Instruction *> &OtherSuccTIs);
-  bool hoistLoadStoreWithCondFaultingFromSuccessors(BasicBlock *BB);
+  bool
+  hoistLoadStoreWithCondFaultingFromSuccessors(BranchInst *BI,
+                                               BasicBlock *ThenBB = nullptr);
   bool SpeculativelyExecuteBB(BranchInst *BI, BasicBlock *ThenBB);
   bool SimplifyTerminatorOnSelect(Instruction *OldTerm, Value *Cond,
                                   BasicBlock *TrueBB, BasicBlock *FalseBB,
@@ -3024,22 +3026,22 @@ static bool validateAndCostRequiredSelects(BasicBlock *BB, BasicBlock *ThenBB,
 /// * after hoistCommonCodeFromSuccessors to ensure unconditional loads/stores
 ///   are handled first.
 bool SimplifyCFGOpt::hoistLoadStoreWithCondFaultingFromSuccessors(
-    BasicBlock *BB) {
+    BranchInst *BI, BasicBlock *ThenBB) {
   if (!HoistLoadsStoresWithCondFaulting ||
       !TTI.hasConditionalLoadStoreForType())
     return false;
 
-  auto *BI = dyn_cast<BranchInst>(BB->getTerminator());
   if (!BI || !BI->isConditional())
     return false;
 
-  BasicBlock *IfTrueBB = BI->getSuccessor(0);
-  BasicBlock *IfFalseBB = BI->getSuccessor(1);
+  auto Successors = ThenBB ? std::initializer_list<BasicBlock *>{ThenBB}
+                           : std::initializer_list<BasicBlock *>{
+                                 BI->getSuccessor(0), BI->getSuccessor(1)};
 
   // If either of the blocks has it's address taken, then we can't do this fold,
   // because the code we'd hoist would no longer run when we jump into the block
   // by it's address.
-  for (auto *Succ : {IfTrueBB, IfFalseBB})
+  for (auto *Succ : Successors)
     if (Succ->hasAddressTaken())
       return false;
 
@@ -3101,13 +3103,16 @@ bool SimplifyCFGOpt::hoistLoadStoreWithCondFaultingFromSuccessors(
     return true;
   };
 
-  if (!HoistInstsInBB(IfTrueBB) || !HoistInstsInBB(IfFalseBB) ||
-      HoistedInsts.empty())
+  for (auto *Succ : Successors)
+    if (!HoistInstsInBB(Succ))
+      return false;
+
+  if (HoistedInsts.empty())
     return false;
 
   // Put newly added instructions before the BranchInst.
   IRBuilder<> Builder(BI);
-  auto &Context = BB->getContext();
+  auto &Context = BI->getParent()->getContext();
   auto *VCondTy = FixedVectorType::get(Type::getInt1Ty(Context), 1);
   auto *Cond = BI->getOperand(0);
   auto *VCond = Builder.CreateBitCast(Cond, VCondTy);
@@ -3119,7 +3124,7 @@ bool SimplifyCFGOpt::hoistLoadStoreWithCondFaultingFromSuccessors(
       continue;
     }
 
-    bool InvertCond = I->getParent() == IfFalseBB;
+    bool InvertCond = I->getParent() == BI->getSuccessor(1);
     // Construct the inverted condition if need.
     if (InvertCond && !VCondNot)
       VCondNot = Builder.CreateBitCast(
@@ -7631,7 +7636,7 @@ bool SimplifyCFGOpt::simplifyCondBranch(BranchInst *BI, IRBuilder<> &Builder) {
       if (HoistCommon && hoistCommonCodeFromSuccessors(
                              BI->getParent(), !Options.HoistCommonInsts))
         return requestResimplify();
-      if (hoistLoadStoreWithCondFaultingFromSuccessors(BI->getParent()))
+      if (hoistLoadStoreWithCondFaultingFromSuccessors(BI))
         return requestResimplify();
     } else {
       // If Successor #1 has multiple preds, we may be able to conditionally
@@ -7639,7 +7644,8 @@ bool SimplifyCFGOpt::simplifyCondBranch(BranchInst *BI, IRBuilder<> &Builder) {
       Instruction *Succ0TI = BI->getSuccessor(0)->getTerminator();
       if (Succ0TI->getNumSuccessors() == 1 &&
           Succ0TI->getSuccessor(0) == BI->getSuccessor(1)) {
-        if (hoistLoadStoreWithCondFaultingFromSuccessors(BI->getParent()))
+        if (hoistLoadStoreWithCondFaultingFromSuccessors(BI,
+                                                         BI->getSuccessor(0)))
           return requestResimplify();
         if (SpeculativelyExecuteBB(BI, BI->getSuccessor(0)))
           return requestResimplify();
@@ -7651,7 +7657,7 @@ bool SimplifyCFGOpt::simplifyCondBranch(BranchInst *BI, IRBuilder<> &Builder) {
     Instruction *Succ1TI = BI->getSuccessor(1)->getTerminator();
     if (Succ1TI->getNumSuccessors() == 1 &&
         Succ1TI->getSuccessor(0) == BI->getSuccessor(0)) {
-      if (hoistLoadStoreWithCondFaultingFromSuccessors(BI->getParent()))
+      if (hoistLoadStoreWithCondFaultingFromSuccessors(BI, BI->getSuccessor(1)))
         return requestResimplify();
       if (SpeculativelyExecuteBB(BI, BI->getSuccessor(1)))
         return requestResimplify();
