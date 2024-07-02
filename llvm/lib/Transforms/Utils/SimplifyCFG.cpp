@@ -3034,7 +3034,7 @@ bool SimplifyCFGOpt::hoistLoadStoreWithCondFaultingFromSuccessors(
   if (!BI || !BI->isConditional())
     return false;
 
-  SmallVector<BasicBlock *> Successors;
+  SmallVector<BasicBlock *, 2> Successors;
   if (ThenBB)
     Successors.push_back(ThenBB);
   else
