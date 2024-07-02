@@ -3034,9 +3034,11 @@ bool SimplifyCFGOpt::hoistLoadStoreWithCondFaultingFromSuccessors(
   if (!BI || !BI->isConditional())
     return false;
 
-  auto Successors = ThenBB ? std::initializer_list<BasicBlock *>{ThenBB}
-                           : std::initializer_list<BasicBlock *>{
-                                 BI->getSuccessor(0), BI->getSuccessor(1)};
+  SmallVector<BasicBlock *> Successors;
+  if (ThenBB)
+    Successors.push_back(ThenBB);
+  else
+    Successors.append({BI->getSuccessor(0), BI->getSuccessor(1)});
 
   // If either of the blocks has it's address taken, then we can't do this fold,
   // because the code we'd hoist would no longer run when we jump into the block
