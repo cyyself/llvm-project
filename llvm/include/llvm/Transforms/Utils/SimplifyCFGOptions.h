@@ -30,6 +30,7 @@ struct SimplifyCFGOptions {
   bool SinkCommonInsts = false;
   bool SimplifyCondBranch = true;
   bool SpeculateBlocks = true;
+  bool ConvertConditionalLoadStores = false;
 
   AssumptionCache *AC = nullptr;
 
@@ -73,6 +74,11 @@ struct SimplifyCFGOptions {
 
   SimplifyCFGOptions &speculateBlocks(bool B) {
     SpeculateBlocks = B;
+    return *this;
+  }
+
+  SimplifyCFGOptions &convertConditionalLoadStores(bool B) {
+    ConvertConditionalLoadStores = B;
     return *this;
   }
 };
