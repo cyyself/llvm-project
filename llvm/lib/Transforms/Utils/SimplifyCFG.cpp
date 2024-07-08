@@ -3050,7 +3050,7 @@ bool SimplifyCFGOpt::hoistLoadStoreWithCondFaultingFromSuccessors(
   };
 
   // Collect hoisted loads/stores.
-  SmallSetVector<Instruction *, 4> HoistedInsts;
+  SmallSetVector<Instruction *, 4> HoistedInsts1, HoistedInsts2;
   // Not hoist load/store if
   // 1. target does not have corresponding conditional faulting load/store.
   // 2. it's volatile or atomic.
@@ -3059,7 +3059,7 @@ bool SimplifyCFGOpt::hoistLoadStoreWithCondFaultingFromSuccessors(
   //    in the same bb.
   // 5. any operand of it does not dominate the branch.
   // 6. it's a store and a memory read is skipped.
-  auto HoistInstsInBB = [&](BasicBlock *BB) {
+  auto HoistInstsInBB = [&](BasicBlock *BB, SmallSetVector<Instruction *, 4>& HoistedInsts) {
     bool SkipMemoryRead = false;
     // A more efficient way to check domination. An operand dominates the
     // BranchInst if
@@ -3101,9 +3101,18 @@ bool SimplifyCFGOpt::hoistLoadStoreWithCondFaultingFromSuccessors(
     return true;
   };
 
-  if (!HoistInstsInBB(IfTrueBB) || !HoistInstsInBB(IfFalseBB) ||
-      HoistedInsts.empty())
+  if (!HoistInstsInBB(IfTrueBB, HoistedInsts1))
+    HoistedInsts1.clear();
+  if (!HoistInstsInBB(IfFalseBB, HoistedInsts2))
+    HoistedInsts2.clear();
+  if (HoistedInsts1.empty() && HoistedInsts2.empty())
     return false;
+
+  SmallSetVector<Instruction *, 4> HoistedInsts;
+  for(auto *I : HoistedInsts1)
+    HoistedInsts.insert(I);
+  for(auto *I : HoistedInsts2)
+    HoistedInsts.insert(I);
 
   // Put newly added instructions before the BranchInst.
   IRBuilder<> Builder(BI);
