@@ -1948,9 +1948,11 @@ bool RISCVTTIImpl::hasConditionalLoadStoreForType(Type *Ty) const {
     return false;
   if (!Ty)
     return true;
-  if (!Ty->isIntOrPtrTy())
+  auto *VTy = dyn_cast<FixedVectorType>(Ty);
+  if (!Ty->isIntegerTy() && (!VTy || VTy->getNumElements() != 1))
     return false;
-  switch (DL.getTypeSizeInBits(Ty)) {
+  auto *ScalarTy = Ty->getScalarType();
+  switch (cast<IntegerType>(ScalarTy)->getBitWidth()) {
   default:
     return false;
   case 8:
