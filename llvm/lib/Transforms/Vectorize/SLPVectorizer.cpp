@@ -99,6 +99,7 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <iostream>
 
 using namespace llvm;
 using namespace llvm::PatternMatch;
@@ -5892,8 +5893,7 @@ void BoUpSLP::buildExternalUses(
           }
         }
 
-        if (U && Scalar->hasNUsesOrMore(UsesLimit))
-          U = nullptr;
+        std::cout << "[Debug]" << Scalar->getNumUses() << std::endl;
         int FoundLane = Entry->findLaneForValue(Scalar);
         LLVM_DEBUG(dbgs() << "SLP: Need to extract:" << *UserInst
                           << " from lane " << FoundLane << " from " << *Scalar
@@ -13942,7 +13942,6 @@ Value *BoUpSLP::vectorizeTree(
       if (!ScalarsWithNullptrUser.insert(Scalar).second)
         continue;
       assert((ExternallyUsedValues.count(Scalar) ||
-              Scalar->hasNUsesOrMore(UsesLimit) ||
               any_of(Scalar->users(),
                      [&](llvm::User *U) {
                        if (ExternalUsesAsGEPs.contains(U))
