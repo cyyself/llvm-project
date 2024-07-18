@@ -185,12 +185,6 @@ define i8 @PR49475_infloop(i32 %t0, i16 %insert, i64 %e, i8 %i162) {
 ; CHECK-NEXT:    [[TOBOOL23_NOT:%.*]] = xor i1 [[CMP]], true
 ; CHECK-NEXT:    call void @llvm.assume(i1 [[TOBOOL23_NOT]])
 ; CHECK-NEXT:    ret i8 [[INC]]
-;
-  %b = icmp eq i32 %t0, 0
-  %b2 = icmp eq i16 %insert, 0
-  %t1 = or i1 %b, %b2
-  %ext = zext i1 %t1 to i32
-  %and = and i32 %t0, %ext
   %conv13 = zext i32 %and to i64
   %xor = xor i64 %conv13, 140
   %conv16 = sext i8 %i162 to i64
