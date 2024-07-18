@@ -1947,20 +1947,6 @@ Instruction *InstCombinerImpl::foldICmpAndConstant(ICmpInst &Cmp,
     }
   }
 
-  // ((zext i1 X) & Y) == 0 --> !((trunc Y) & X)
-  // ((zext i1 X) & Y) != 0 -->  ((trunc Y) & X)
-  // ((zext i1 X) & Y) == 1 -->  ((trunc Y) & X)
-  // ((zext i1 X) & Y) != 1 --> !((trunc Y) & X)
-  if (match(And, m_OneUse(m_c_And(m_OneUse(m_ZExt(m_Value(X))), m_Value(Y)))) &&
-      X->getType()->isIntOrIntVectorTy(1) && (C.isZero() || C.isOne())) {
-    Value *TruncY = Builder.CreateTrunc(Y, X->getType());
-    if (C.isZero() ^ (Pred == CmpInst::ICMP_NE)) {
-      Value *And = Builder.CreateAnd(TruncY, X);
-      return BinaryOperator::CreateNot(And);
-    }
-    return BinaryOperator::CreateAnd(TruncY, X);
-  }
-
   // (icmp eq/ne (and (shl -1, X), Y), 0)
   //    -> (icmp eq/ne (lshr Y, X), 0)
   // We could technically handle any C == 0 or (C < 0 && isOdd(C)) but it seems
