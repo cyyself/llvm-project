@@ -4584,10 +4584,9 @@ define i1 @redundant_sign_bit_count_ugt_31_30(i32 %x) {
 
 define i1 @zext_bool_and_eq0(i1 %x, i8 %y) {
 ; CHECK-LABEL: @zext_bool_and_eq0(
-; CHECK-NEXT:    [[TMP1:%.*]] = and i8 [[Y:%.*]], 1
-; CHECK-NEXT:    [[TMP2:%.*]] = icmp ne i8 [[TMP1]], 0
-; CHECK-NEXT:    [[TMP3:%.*]] = and i1 [[TMP2]], [[X:%.*]]
-; CHECK-NEXT:    [[R:%.*]] = xor i1 [[TMP3]], true
+; CHECK-NEXT:    [[ZX:%.*]] = zext i1 [[X:%.*]] to i8
+; CHECK-NEXT:    [[A:%.*]] = and i8 [[ZX]], [[Y:%.*]]
+; CHECK-NEXT:    [[R:%.*]] = icmp eq i8 [[A]], 0
 ; CHECK-NEXT:    ret i1 [[R]]
 ;
   %zx = zext i1 %x to i8
@@ -4598,9 +4597,9 @@ define i1 @zext_bool_and_eq0(i1 %x, i8 %y) {
 
 define <2 x i1> @zext_bool_and_eq0_commute(<2 x i1> %x, <2 x i8> %p) {
 ; CHECK-LABEL: @zext_bool_and_eq0_commute(
-; CHECK-NEXT:    [[TMP1:%.*]] = trunc <2 x i8> [[P:%.*]] to <2 x i1>
-; CHECK-NEXT:    [[TMP2:%.*]] = and <2 x i1> [[TMP1]], [[X:%.*]]
-; CHECK-NEXT:    [[R:%.*]] = xor <2 x i1> [[TMP2]], <i1 true, i1 true>
+; CHECK-NEXT:    [[ZX:%.*]] = zext <2 x i1> [[X:%.*]] to <2 x i8>
+; CHECK-NEXT:    [[A:%.*]] = and <2 x i8> [[ZX]], [[P:%.*]]
+; CHECK-NEXT:    [[R:%.*]] = icmp eq <2 x i8> [[A]], zeroinitializer
 ; CHECK-NEXT:    ret <2 x i1> [[R]]
 ;
   %y = mul <2 x i8> %p, %p ; thwart complexity-based canonicalization
@@ -4612,9 +4611,9 @@ define <2 x i1> @zext_bool_and_eq0_commute(<2 x i1> %x, <2 x i8> %p) {
 
 define i1 @zext_bool_and_ne0(i1 %x, i8 %y) {
 ; CHECK-LABEL: @zext_bool_and_ne0(
-; CHECK-NEXT:    [[TMP1:%.*]] = and i8 [[Y:%.*]], 1
-; CHECK-NEXT:    [[TMP2:%.*]] = icmp ne i8 [[TMP1]], 0
-; CHECK-NEXT:    [[R:%.*]] = and i1 [[TMP2]], [[X:%.*]]
+; CHECK-NEXT:    [[ZX:%.*]] = zext i1 [[X:%.*]] to i8
+; CHECK-NEXT:    [[A:%.*]] = and i8 [[ZX]], [[Y:%.*]]
+; CHECK-NEXT:    [[R:%.*]] = icmp ne i8 [[A]], 0
 ; CHECK-NEXT:    ret i1 [[R]]
 ;
   %zx = zext i1 %x to i8
@@ -4664,8 +4663,6 @@ define i1 @zext_bool_or_eq0(i1 %x, i8 %y) {
   ret i1 %r
 }
 
-; negative test - extra use
-
 define i1 @zext_bool_and_eq0_use(i1 %x, i64 %y) {
 ; CHECK-LABEL: @zext_bool_and_eq0_use(
 ; CHECK-NEXT:    [[ZX:%.*]] = zext i1 [[X:%.*]] to i64
@@ -4681,8 +4678,6 @@ define i1 @zext_bool_and_eq0_use(i1 %x, i64 %y) {
   ret i1 %r
 }
 
-; negative test - extra use
-
 define i1 @zext_bool_and_ne0_use(i1 %x, i64 %y) {
 ; CHECK-LABEL: @zext_bool_and_ne0_use(
 ; CHECK-NEXT:    [[ZX:%.*]] = zext i1 [[X:%.*]] to i64
@@ -4697,8 +4692,6 @@ define i1 @zext_bool_and_ne0_use(i1 %x, i64 %y) {
   %r = icmp ne i64 %a, 0
   ret i1 %r
 }
-
-; negative test - must zext from i1
 
 define i1 @zext_notbool_and_ne0(i2 %x, i8 %y) {
 ; CHECK-LABEL: @zext_notbool_and_ne0(
