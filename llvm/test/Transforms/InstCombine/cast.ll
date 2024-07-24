@@ -1397,7 +1397,8 @@ define float @sitofp_zext(i16 %a) {
 define i1 @PR23309(i32 %A, i32 %B) {
 ; ALL-LABEL: @PR23309(
 ; ALL-NEXT:    [[SUB:%.*]] = sub i32 [[A:%.*]], [[B:%.*]]
-; ALL-NEXT:    [[TRUNC:%.*]] = trunc i32 [[SUB]] to i1
+; ALL-NEXT:    [[TMP1:%.*]] = and i32 [[SUB]], 1
+; ALL-NEXT:    [[TRUNC:%.*]] = icmp ne i32 [[TMP1]], 0
 ; ALL-NEXT:    ret i1 [[TRUNC]]
 ;
   %add = add i32 %A, -4
@@ -1409,7 +1410,8 @@ define i1 @PR23309(i32 %A, i32 %B) {
 define i1 @PR23309v2(i32 %A, i32 %B) {
 ; ALL-LABEL: @PR23309v2(
 ; ALL-NEXT:    [[SUB:%.*]] = add i32 [[A:%.*]], [[B:%.*]]
-; ALL-NEXT:    [[TRUNC:%.*]] = trunc i32 [[SUB]] to i1
+; ALL-NEXT:    [[TMP1:%.*]] = and i32 [[SUB]], 1
+; ALL-NEXT:    [[TRUNC:%.*]] = icmp ne i32 [[TMP1]], 0
 ; ALL-NEXT:    ret i1 [[TRUNC]]
 ;
   %add = add i32 %A, -4
