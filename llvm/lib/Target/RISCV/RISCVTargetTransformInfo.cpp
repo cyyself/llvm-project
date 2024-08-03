@@ -1989,3 +1989,24 @@ bool RISCVTTIImpl::areInlineCompatible(const Function *Caller,
   // target-features.
   return (CallerBits & CalleeBits) == CalleeBits;
 }
+
+bool RISCVTTIImpl::hasConditionalLoadStoreForType(Type *Ty) const {
+  if (!ST->hasStdExtZicldst())
+    return false;
+  if (!Ty)
+    return true;
+  auto *VTy = dyn_cast<FixedVectorType>(Ty);
+  if (!Ty->isIntOrPtrTy() && (!VTy || VTy->getNumElements() != 1))
+    return false;
+  auto *ScalarTy = Ty->getScalarType();
+  switch (DL.getTypeSizeInBits(Ty)) {
+  default:
+    return false;
+  case 8:
+  case 16:
+  case 32:
+    return true;
+  case 64:
+    return ST->is64Bit();
+  }
+}
