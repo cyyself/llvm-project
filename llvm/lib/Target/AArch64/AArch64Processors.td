@@ -1129,9 +1129,9 @@ def : ProcessorModel<"cortex-a710", NeoverseN2Model, ProcessorFeatures.A710,
                      [TuneA710]>;
 def : ProcessorModel<"cortex-a715", NeoverseN2Model, ProcessorFeatures.A715,
                      [TuneA715]>;
-def : ProcessorModel<"cortex-a720", NeoverseN2Model, ProcessorFeatures.A720,
+def : ProcessorModel<"cortex-a720", A720Model, ProcessorFeatures.A720,
                      [TuneA720]>;
-def : ProcessorModel<"cortex-a720ae", NeoverseN2Model, ProcessorFeatures.A720AE,
+def : ProcessorModel<"cortex-a720ae", A720Model, ProcessorFeatures.A720AE,
                      [TuneA720AE]>;
 def : ProcessorModel<"cortex-a725", NeoverseN3Model, ProcessorFeatures.A725,
                      [TuneA725]>;
