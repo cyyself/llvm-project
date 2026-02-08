@@ -1568,8 +1568,13 @@ protected:
 private:
   std::optional<std::unique_ptr<DarwinSDKInfo>> CachedDarwinSDKInfo;
   bool WarnedDarwinSDKInfoMissing = false;
+  struct TargetClonesTableInfo;
+  std::unique_ptr<TargetClonesTableInfo> TargetClonesTable;
 
   StackExhaustionHandler StackHandler;
+
+  bool loadTargetClonesTable(TargetClonesTableInfo &Info);
+  bool applyTargetClonesTable(FunctionDecl *FD, bool IsDefinition);
 
   Sema(const Sema &) = delete;
   void operator=(const Sema &) = delete;

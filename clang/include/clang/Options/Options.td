@@ -1852,6 +1852,11 @@ def fprofile_use_EQ : Joined<["-"], "fprofile-use=">,
     Visibility<[ClangOption, CLOption, FlangOption, FC1Option]>,
     MetaVarName<"<pathname>">,
     HelpText<"Use instrumentation data for profile-guided optimization. If pathname is a directory, it reads from <pathname>/default.profdata. Otherwise, it reads from file <pathname>.">;
+def ftarget_clones_table_EQ : Joined<["-"], "ftarget-clones-table=">,
+    Group<f_Group>, Visibility<[ClangOption, CC1Option]>,
+    MetaVarName<"<path>">,
+    HelpText<"Apply target_clones attributes from a JSON table file">,
+    MarshallingInfoString<LangOpts<"TargetClonesTable">, "\"\"">;
 def fno_profile_instr_generate : Flag<["-"], "fno-profile-instr-generate">,
     Group<f_Group>, Visibility<[ClangOption, CLOption]>,
     HelpText<"Disable generation of profile instrumentation.">;

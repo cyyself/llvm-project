@@ -14,12 +14,14 @@
 #include "UsedDeclVisitor.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/AST/ASTDiagnostic.h"
+#include "clang/AST/Attr.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclCXX.h"
 #include "clang/AST/DeclFriend.h"
 #include "clang/AST/DeclObjC.h"
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
+#include "clang/AST/Mangle.h"
 #include "clang/AST/PrettyDeclStackTrace.h"
 #include "clang/AST/StmtCXX.h"
 #include "clang/AST/TypeOrdering.h"
@@ -38,6 +40,10 @@
 #include "clang/Sema/MultiplexExternalSemaSource.h"
 #include "clang/Sema/ObjCMethodList.h"
 #include "clang/Sema/RISCVIntrinsicManager.h"
+#include "llvm/ADT/StringMap.h"
+#include "llvm/Support/Error.h"
+#include "llvm/Support/JSON.h"
+#include "llvm/Support/MemoryBuffer.h"
 #include "clang/Sema/Scope.h"
 #include "clang/Sema/ScopeInfo.h"
 #include "clang/Sema/SemaAMDGPU.h"
@@ -357,6 +363,186 @@ Sema::Sema(Preprocessor &pp, ASTContext &ctxt, ASTConsumer &consumer,
   SemaPPCallbackHandler->set(*this);
 
   CurFPFeatures.setFPEvalMethod(PP.getCurrentFPEvalMethod());
+}
+
+struct Sema::TargetClonesTableInfo {
+  bool Parsed = false;
+  bool HadError = false;
+  llvm::StringMap<llvm::SmallVector<std::string, 4>> Entries;
+};
+
+static std::string getTargetClonesMangledName(Sema &S, const FunctionDecl *FD) {
+  std::string MangledName;
+  llvm::raw_string_ostream OS(MangledName);
+  std::unique_ptr<MangleContext> MC(S.Context.createMangleContext());
+  MC->mangleName(GlobalDecl(FD), OS);
+  return OS.str();
+}
+
+bool Sema::loadTargetClonesTable(TargetClonesTableInfo &Info) {
+  if (Info.Parsed)
+    return !Info.HadError;
+
+  Info.Parsed = true;
+  if (getLangOpts().TargetClonesTable.empty())
+    return false;
+
+  auto BufferOrErr =
+      llvm::MemoryBuffer::getFile(getLangOpts().TargetClonesTable);
+  if (!BufferOrErr) {
+    Diag(SourceLocation(), diag::err_target_clones_table_open)
+        << getLangOpts().TargetClonesTable
+        << BufferOrErr.getError().message();
+    Info.HadError = true;
+    return false;
+  }
+
+  auto JsonValue = llvm::json::parse((*BufferOrErr)->getBuffer());
+  if (!JsonValue) {
+    Diag(SourceLocation(), diag::err_target_clones_table_parse)
+        << getLangOpts().TargetClonesTable
+        << llvm::toString(JsonValue.takeError());
+    Info.HadError = true;
+    return false;
+  }
+
+  const auto *Root = JsonValue->getAsObject();
+  if (!Root) {
+    Diag(SourceLocation(), diag::err_target_clones_table_not_object)
+        << getLangOpts().TargetClonesTable;
+    Info.HadError = true;
+    return false;
+  }
+
+  StringRef ArchKey =
+      Context.getTargetInfo().getTriple().getArchName();
+  for (const auto &Entry : *Root) {
+    const auto *FuncObj = Entry.second.getAsObject();
+    if (!FuncObj)
+      continue;
+
+    const auto *ArchVal = FuncObj->get(ArchKey);
+    if (!ArchVal)
+      continue;
+
+    const auto *ArchArray = ArchVal->getAsArray();
+    if (!ArchArray)
+      continue;
+
+    for (const auto &Elem : *ArchArray) {
+      auto Str = Elem.getAsString();
+      if (!Str) {
+        Diag(SourceLocation(), diag::warn_target_clones_table_entry_not_string)
+            << Entry.first;
+        continue;
+      }
+      StringRef Trimmed = Str->trim();
+      if (Trimmed == "default") {
+        Diag(SourceLocation(), diag::warn_target_clones_table_default_ignored)
+            << Entry.first;
+        continue;
+      }
+      Info.Entries[Entry.first].push_back(Trimmed.str());
+    }
+  }
+
+  return true;
+}
+
+bool Sema::applyTargetClonesTable(FunctionDecl *FD, bool IsDefinition) {
+  if (!FD || FD->isInvalidDecl())
+    return false;
+  if (LangOpts.TargetClonesTable.empty())
+    return false;
+  if (!IsDefinition && !FD->isThisDeclarationADefinition())
+    return false;
+
+  MultiVersionKind MVKind = FD->getMultiVersionKind();
+  if (MVKind != MultiVersionKind::None &&
+      MVKind != MultiVersionKind::TargetClones) {
+    Diag(FD->getLocation(), diag::warn_target_clones_table_incompatible_attr)
+        << FD->getNameAsString();
+    return false;
+  }
+
+  if (!TargetClonesTable)
+    TargetClonesTable = std::make_unique<TargetClonesTableInfo>();
+
+  if (!loadTargetClonesTable(*TargetClonesTable) ||
+      TargetClonesTable->HadError)
+    return false;
+
+  std::string MangledName = getTargetClonesMangledName(*this, FD);
+  auto It = TargetClonesTable->Entries.find(MangledName);
+  if (It == TargetClonesTable->Entries.end() &&
+      (!getLangOpts().CPlusPlus || FD->isExternC())) {
+    It = TargetClonesTable->Entries.find(FD->getNameAsString());
+  }
+  if (It == TargetClonesTable->Entries.end())
+    return false;
+
+  SmallVector<std::string, 8> CombinedParams;
+  if (const auto *Existing = FD->getAttr<TargetClonesAttr>()) {
+    for (auto It = Existing->featuresStrs_begin(),
+              End = Existing->featuresStrs_end();
+         It != End; ++It)
+      CombinedParams.push_back(It->str());
+  }
+  for (const auto &Param : It->second)
+    CombinedParams.push_back(Param);
+
+  bool HasDefault = llvm::any_of(CombinedParams, [](const std::string &Param) {
+    return StringRef(Param).trim() == "default";
+  });
+  if (!HasDefault)
+    CombinedParams.emplace_back("default");
+
+  SmallVector<StringRef, 8> Params;
+  SmallVector<SourceLocation, 8> Locs;
+  Params.reserve(CombinedParams.size());
+  Locs.reserve(CombinedParams.size());
+  for (const auto &Param : CombinedParams) {
+    Params.push_back(Param);
+    Locs.push_back(FD->getLocation());
+  }
+
+  SmallVector<SmallString<64>, 8> NewParams;
+  const auto &Triple = Context.getTargetInfo().getTriple();
+  if (Triple.isAArch64()) {
+    if (ARM().checkTargetClonesAttr(Params, Locs, NewParams))
+      return false;
+  } else if (Triple.isRISCV()) {
+    if (RISCV().checkTargetClonesAttr(Params, Locs, NewParams,
+                                      FD->getLocation()))
+      return false;
+  } else if (Triple.isX86()) {
+    if (X86().checkTargetClonesAttr(Params, Locs, NewParams,
+                                    FD->getLocation()))
+      return false;
+  } else {
+    return false;
+  }
+
+  if (NewParams.empty())
+    return false;
+
+  SmallVector<StringRef, 8> FinalParams;
+  FinalParams.reserve(NewParams.size());
+  for (auto &Param : NewParams)
+    FinalParams.push_back(Param.str());
+
+  if (FD->hasAttr<TargetClonesAttr>())
+    FD->dropAttrs<TargetClonesAttr>();
+
+  AttributeCommonInfo CommonInfo(FD->getSourceRange(),
+                                 AttributeCommonInfo::AT_TargetClones,
+                                 AttributeCommonInfo::Form::Implicit());
+  auto *NewAttr = ::new (Context)
+      TargetClonesAttr(Context, CommonInfo, FinalParams.data(),
+                       FinalParams.size());
+  NewAttr->setImplicit(true);
+  FD->addAttr(NewAttr);
+  return true;
 }
 
 // Anchor Sema's type info to this TU.

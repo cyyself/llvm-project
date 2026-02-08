@@ -13052,6 +13052,21 @@ def warn_version_priority_out_of_range
 def warn_invalid_default_version_priority
     : Warning<"priority of default version cannot be overridden; ignoring priority">,
       InGroup<FunctionMultiVersioning>;
+def err_target_clones_table_open : Error<
+  "cannot open target clones table file '%0': %1">;
+def err_target_clones_table_parse : Error<
+  "error parsing target clones table file '%0': %1">;
+def err_target_clones_table_not_object : Error<
+  "target clones table file '%0' is not a JSON object">;
+def warn_target_clones_table_default_ignored
+    : Warning<"ignoring 'default' entry in target clones table for function '%0'">,
+      InGroup<FunctionMultiVersioning>;
+def warn_target_clones_table_entry_not_string
+    : Warning<"target clones table entry for function '%0' is not a string">,
+      InGroup<FunctionMultiVersioning>;
+def warn_target_clones_table_incompatible_attr
+    : Warning<"ignoring target clones table entries for function '%0' due to incompatible multiversion attribute">,
+      InGroup<FunctionMultiVersioning>;
 
 // three-way comparison operator diagnostics
 def err_implied_comparison_category_type_not_found : Error<

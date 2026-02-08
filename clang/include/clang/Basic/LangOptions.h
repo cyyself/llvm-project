@@ -487,6 +487,9 @@ public:
   /// (files, functions) should or should not be instrumented.
   std::vector<std::string> ProfileListFiles;
 
+  /// Path to the JSON target_clones table file.
+  std::string TargetClonesTable;
+
   clang::ObjCRuntime ObjCRuntime;
 
   CoreFoundationABI CFRuntime = CoreFoundationABI::Unspecified;

@@ -5366,6 +5366,7 @@ void CompilerInvocationBase::visitPathsImpl(
 
   // Sanitizer options.
   RETURN_IF_MANY(LangOpts->NoSanitizeFiles);
+  RETURN_IF(LangOpts->TargetClonesTable);
 
   // Coverage mappings.
   RETURN_IF(CodeGenOpts.ProfileInstrumentUsePath);
